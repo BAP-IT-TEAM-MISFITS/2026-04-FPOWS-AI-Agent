@@ -8,7 +8,12 @@
 # Docker is used if available; otherwise the build falls back to Cloud Build.
 # =============================================================================
 
-$ErrorActionPreference = "Stop"
+# NOTE: use 'Continue', not 'Stop'. gcloud writes progress + expected errors
+# (e.g. a NOT_FOUND from a "does this repo exist?" describe) to stderr; under
+# 'Stop' PowerShell 5.1 promotes those to terminating NativeCommandErrors and
+# aborts the script. Real failures are caught explicitly via $LASTEXITCODE
+# checks and `exit 1` below, so 'Continue' is both safe and correct here.
+$ErrorActionPreference = "Continue"
 
 # This script lives in <repo>/deploy, so the repo root (build context + .env) is
 # one level up.
@@ -122,7 +127,10 @@ gcloud run deploy $SERVICE_NAME `
 if ($LASTEXITCODE -ne 0) { Write-Error "Cloud Run deploy failed."; exit 1 }
 
 # --- Fetch the deployed service URL ------------------------------------------
-$SERVICE_URL = gcloud run services describe $SERVICE_NAME --region $REGION --project $PROJECT_ID --format "value(status.url)"
+$SERVICE_URL = (gcloud run services describe $SERVICE_NAME --region $REGION --project $PROJECT_ID --format "value(status.url)")
+# Trim any trailing CR/whitespace from the captured value - a stray \r makes
+# the uptime-check host malformed ("uptime_url check has malformed host").
+if ($SERVICE_URL) { $SERVICE_URL = ([string]$SERVICE_URL).Trim() }
 if (-not $SERVICE_URL) {
     Write-Error "Could not determine service URL after deploy."
     exit 1
@@ -204,17 +212,18 @@ try {
             --project $PROJECT_ID `
             --filter="displayName='$CHANNEL_NAME'" `
             --format="value(name)" 2>$null
+        if ($channel) { $channel = ([string]$channel).Trim() }
         if (-not $channel) {
             Write-Host "==> Creating email notification channel -> $MANAGER_EMAIL" -ForegroundColor Cyan
-            gcloud beta monitoring channels create `
+            # Capture the new channel's name directly from create output - a
+            # list-after-create can miss it (propagation lag) and create dupes.
+            $channel = (gcloud beta monitoring channels create `
                 --project $PROJECT_ID `
                 --type=email `
                 --display-name="$CHANNEL_NAME" `
-                --channel-labels=email_address=$MANAGER_EMAIL | Out-Null
-            $channel = gcloud beta monitoring channels list `
-                --project $PROJECT_ID `
-                --filter="displayName='$CHANNEL_NAME'" `
-                --format="value(name)" 2>$null
+                --channel-labels=email_address=$MANAGER_EMAIL `
+                --format="value(name)" 2>$null)
+            if ($channel) { $channel = ([string]$channel).Trim() }
         }
 
         # 2b. Alert policy (idempotent by display name).
