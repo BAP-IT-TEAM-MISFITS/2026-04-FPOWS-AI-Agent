@@ -144,8 +144,141 @@ gcloud scheduler jobs create http $JOB_NAME `
     --project=$PROJECT_ID `
     --description="Daily FPOWS report at 6am Manila"
 
+# --- Monitoring: uptime check + email alert (idempotent, NON-FATAL) ----------
+# This whole block runs AFTER the service + scheduler are already live, and is
+# wrapped so ANY failure here only warns - it can never fail or roll back the
+# deployment that already succeeded above.
+$UPTIME_NAME  = "fpows-health"
+$UPTIME_HOST  = ($SERVICE_URL -replace '^https?://', '')
+$CHANNEL_NAME = "FPOWS Alerts (email)"
+$POLICY_NAME  = "FPOWS health check failing"
+$alertSummary = "not configured"
+
+try {
+    # -- 1. Uptime check: pings /health every 5 min. /health returns 200 only
+    #    when the simPRO + SMTP env vars are present (503 'degraded' otherwise),
+    #    so a red check means the service is down or misconfigured. Re-running
+    #    leaves an existing check untouched (uptime checks aren't keyed by name).
+    $existingUptime = gcloud monitoring uptime list-configs `
+        --project $PROJECT_ID `
+        --filter="displayName='$UPTIME_NAME'" `
+        --format="value(name)" 2>$null
+
+    if ($existingUptime) {
+        Write-Host "==> Uptime check '$UPTIME_NAME' already exists - leaving as is." -ForegroundColor Cyan
+    }
+    else {
+        Write-Host "==> Creating uptime check '$UPTIME_NAME' against https://$UPTIME_HOST/health..." -ForegroundColor Cyan
+        gcloud monitoring uptime create $UPTIME_NAME `
+            --resource-type=uptime-url `
+            --resource-labels=host=$UPTIME_HOST,project_id=$PROJECT_ID `
+            --protocol=https `
+            --path="/health" `
+            --port=443 `
+            --period=5 `
+            --timeout=10 `
+            --matcher-content="ok" `
+            --matcher-type=contains-string `
+            --project=$PROJECT_ID
+    }
+
+    # Fetch the config's resource name (works whether pre-existing or just made).
+    # The metric label 'check_id' used by the alert filter is its last segment.
+    $uptimeConfigName = gcloud monitoring uptime list-configs `
+        --project $PROJECT_ID `
+        --filter="displayName='$UPTIME_NAME'" `
+        --format="value(name)" 2>$null
+    $UPTIME_CHECK_ID = ($uptimeConfigName -split '/')[-1]
+
+    # -- 2. Email alert policy: notifies when the uptime check fails. Needs a
+    #    recipient; skip cleanly if MANAGER_EMAIL isn't set.
+    if (-not $MANAGER_EMAIL) {
+        Write-Warning "MANAGER_EMAIL not set - uptime check created, but skipping the email alert policy."
+    }
+    elseif (-not $UPTIME_CHECK_ID) {
+        Write-Warning "Could not resolve the uptime check id - skipping the email alert policy."
+    }
+    else {
+        # 2a. Email notification channel (idempotent by display name).
+        $channel = gcloud beta monitoring channels list `
+            --project $PROJECT_ID `
+            --filter="displayName='$CHANNEL_NAME'" `
+            --format="value(name)" 2>$null
+        if (-not $channel) {
+            Write-Host "==> Creating email notification channel -> $MANAGER_EMAIL" -ForegroundColor Cyan
+            gcloud beta monitoring channels create `
+                --project $PROJECT_ID `
+                --type=email `
+                --display-name="$CHANNEL_NAME" `
+                --channel-labels=email_address=$MANAGER_EMAIL | Out-Null
+            $channel = gcloud beta monitoring channels list `
+                --project $PROJECT_ID `
+                --filter="displayName='$CHANNEL_NAME'" `
+                --format="value(name)" 2>$null
+        }
+
+        # 2b. Alert policy (idempotent by display name).
+        $existingPolicy = gcloud monitoring policies list `
+            --project $PROJECT_ID `
+            --filter="displayName='$POLICY_NAME'" `
+            --format="value(name)" 2>$null
+
+        if ($existingPolicy) {
+            Write-Host "==> Alert policy '$POLICY_NAME' already exists - leaving as is." -ForegroundColor Cyan
+            $alertSummary = "$POLICY_NAME (existing) -> $MANAGER_EMAIL"
+        }
+        elseif (-not $channel) {
+            Write-Warning "Notification channel unavailable - skipping the alert policy."
+        }
+        else {
+            Write-Host "==> Creating alert policy '$POLICY_NAME'..." -ForegroundColor Cyan
+            $policyJson = @"
+{
+  "displayName": "$POLICY_NAME",
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "Uptime check failing",
+      "conditionThreshold": {
+        "filter": "resource.type = \"uptime_url\" AND metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id = \"$UPTIME_CHECK_ID\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_NEXT_OLDER",
+            "crossSeriesReducer": "REDUCE_COUNT_FALSE",
+            "groupByFields": ["resource.label.host"]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 1,
+        "duration": "300s",
+        "trigger": { "count": 1 }
+      }
+    }
+  ],
+  "notificationChannels": ["$channel"],
+  "alertStrategy": { "autoClose": "1800s" }
+}
+"@
+            # Write UTF-8 WITHOUT BOM (gcloud's JSON parser rejects a BOM).
+            $policyFile = Join-Path $env:TEMP "fpows-alert-policy.json"
+            [System.IO.File]::WriteAllText($policyFile, $policyJson)
+            gcloud monitoring policies create `
+                --project $PROJECT_ID `
+                --policy-from-file=$policyFile
+            Remove-Item $policyFile -ErrorAction SilentlyContinue
+            $alertSummary = "$POLICY_NAME -> $MANAGER_EMAIL"
+        }
+    }
+}
+catch {
+    Write-Warning "Monitoring setup step failed (the deployment itself is UNAFFECTED): $($_.Exception.Message)"
+}
+
 Write-Host ""
 Write-Host "Deployed image:   $IMAGE_TAGGED" -ForegroundColor Green
 Write-Host "Service URL:      $SERVICE_URL" -ForegroundColor Green
 Write-Host "Scheduler:        6:00 AM Asia/Manila -> $TRIGGER_URI"
+Write-Host "Uptime check:     $UPTIME_NAME -> https://$UPTIME_HOST/health (every 5 min)"
+Write-Host "Alert policy:     $alertSummary"
 Write-Host "Report recipient: $MANAGER_EMAIL"

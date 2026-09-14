@@ -34,7 +34,7 @@ npm run dev                 # same, with --watch auto-reload
 ## Deploying
 
 ```powershell
-.\deploy.ps1   # reads .env, deploys to Cloud Run, (re)creates the 6am scheduler job
+.\deploy\deploy.ps1   # reads .env, deploys to Cloud Run, (re)creates the 6am scheduler job + uptime check
 ```
 
 ## Environment variables
