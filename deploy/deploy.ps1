@@ -123,6 +123,8 @@ gcloud run deploy $SERVICE_NAME `
     --project $PROJECT_ID `
     --allow-unauthenticated `
     --timeout=540 `
+    --min-instances=0 `
+    --max-instances=10 `
     --set-env-vars=$envVars
 if ($LASTEXITCODE -ne 0) { Write-Error "Cloud Run deploy failed."; exit 1 }
 
