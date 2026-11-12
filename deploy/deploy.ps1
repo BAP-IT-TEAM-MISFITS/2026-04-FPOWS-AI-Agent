@@ -214,12 +214,22 @@ try {
     }
     else {
         # 2a. Email notification channel (idempotent by display name).
-        $channel = gcloud beta monitoring channels list `
+        # Match the display name client-side: `channels list --filter` is sent to
+        # the Monitoring API, which rejects single-quoted values. That error was
+        # swallowed by 2>$null, so every deploy created a duplicate channel.
+        $channelRows = gcloud beta monitoring channels list `
             --project $PROJECT_ID `
-            --filter="displayName='$CHANNEL_NAME'" `
-            --format="value(name)" 2>$null
-        if ($channel) { $channel = ([string]$channel).Trim() }
-        if (-not $channel) {
+            --format="value(name,displayName)" 2>$null
+        $channelListOk = ($LASTEXITCODE -eq 0)
+        $channel = $channelRows |
+            Where-Object { ($_ -split "`t", 2)[1] -eq $CHANNEL_NAME } |
+            ForEach-Object { ($_ -split "`t", 2)[0].Trim() } |
+            Select-Object -First 1
+        if (-not $channelListOk) {
+            # Don't create blind - a failed lookup is how the duplicates happened.
+            Write-Warning "Could not list notification channels - not creating one."
+        }
+        elseif (-not $channel) {
             Write-Host "==> Creating email notification channel -> $MANAGER_EMAIL" -ForegroundColor Cyan
             # Capture the new channel's name directly from create output - a
             # list-after-create can miss it (propagation lag) and create dupes.
