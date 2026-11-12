@@ -196,7 +196,9 @@ export const fetchFpowData = async (jobId, opts = {}) => {
     let clientName = jobData.Customer?.CompanyName || jobData.Customer?.Name || "Client Not Found";
     if (jobData.Customer?.ID) {
         try {
-            const custRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/customers/${jobData.Customer.ID}`);
+            // simPRO has no /customers/{id}; the route is typed (companies|individuals)
+            const custType = (jobData.Customer.Type || '').toLowerCase() === 'individual' ? 'individuals' : 'companies';
+            const custRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/customers/${custType}/${jobData.Customer.ID}`);
             const cust = custRes.data;
             if (cust.CompanyName) {
                 clientName = cust.CompanyName;
