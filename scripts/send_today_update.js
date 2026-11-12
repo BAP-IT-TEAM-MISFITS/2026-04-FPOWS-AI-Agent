@@ -5,7 +5,7 @@ dotenv.config();
 
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
-const MANAGER_EMAIL = process.env.MANAGER_EMAIL || "bryan.morales@redadair.com.au";
+const MANAGER_EMAIL = process.env.MANAGER_EMAIL;
 
 function getTransporter() {
     return nodemailer.createTransport({

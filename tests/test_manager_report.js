@@ -76,7 +76,7 @@ async function runTestReport() {
         `;
 
         const transporter = getTransporter();
-        const recipients = [MANAGER_EMAIL, "bryan.morales@redadair.com.au"].filter(Boolean).join(',');
+        const recipients = [MANAGER_EMAIL].filter(Boolean).join(',');
 
         console.log(`Sending test report to: ${recipients}`);
         

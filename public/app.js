@@ -766,7 +766,6 @@
             `;
                 // managerOnly = true (chatbot send) → manager only. false (button) → client + manager
                 let actualClient = managerOnly ? null : (emailText || null);
-                let potentialManager = 'bryan.morales@redadair.com.au';
 
                 console.log(`[DEBUG] Attempting to dispatch email for Job #${jobId}. Payload length: ${emailHtml.length}`);
 
@@ -777,7 +776,7 @@
                         jobId: jobId,
                         clientName: clientName,
                         recipientEmail: actualClient,
-                        managerEmail: potentialManager,
+                        managerEmail: null, // server CCs MANAGER_EMAIL
                         subject: `FPOWS Call Sheet - Job #${jobId} - ${clientName}`,
                         htmlContent: emailHtml,
                         siteId: $('f-site').dataset.siteId || '',
@@ -1050,7 +1049,7 @@
                     if (!btnPublish || btnPublish.style.display === 'none') {
                         speak("No job loaded yet — give me a job number first.", "", "error");
                     } else {
-                        const toManager = q.match(/manager|bryan/);
+                        const toManager = q.match(/manager|\bmarc\b/);
                         speak(
                             toManager ? "Sending to the manager now!" : "On it — triggering the email now!",
                             "Keep an eye on the status bar.",
