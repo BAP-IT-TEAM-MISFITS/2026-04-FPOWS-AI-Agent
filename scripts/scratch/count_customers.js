@@ -7,7 +7,7 @@ const COMPANY_ID = process.env.SIMPRO_COMPANY_ID || "1";
 
 async function countUniqueCustomers() {
     try {
-        const activeJobsRes = await axios.get(`${SIMPRO_BASE_URL}/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=Pending&Stage=Progress&pageSize=250&columns=ID,Customer`, {
+        const activeJobsRes = await axios.get(`${SIMPRO_BASE_URL}/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=in(Pending,Progress)&pageSize=250&columns=ID,Customer`, {
             headers: { 'Authorization': `Bearer ${SIMPRO_ACCESS_TOKEN}` }
         });
         

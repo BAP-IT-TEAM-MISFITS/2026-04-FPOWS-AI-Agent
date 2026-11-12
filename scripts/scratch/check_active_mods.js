@@ -8,7 +8,7 @@ const COMPANY_ID = process.env.SIMPRO_COMPANY_ID || "1";
 async function checkPendingProgress() {
     try {
         console.log("Fetching all Pending/Progress jobs to check for April 22 modifications...");
-        const url = `${SIMPRO_BASE_URL}/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=Pending&Stage=Progress&pageSize=250&columns=ID,Site,DateModified`;
+        const url = `${SIMPRO_BASE_URL}/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=in(Pending,Progress)&pageSize=250&columns=ID,Site,DateModified`;
         const res = await axios.get(url, {
             headers: { 'Authorization': `Bearer ${SIMPRO_ACCESS_TOKEN}` }
         });

@@ -40,7 +40,7 @@ customersRouter.get('/api/customers/search', searchLimiter, async (req, res) => 
         // Cache valid for 60 seconds. force=1 always bypasses it (e.g. on modal open)
         if (!cache.customers || (Date.now() - cache.customersTime) > 60000 || req.query.force === '1') {
             // 1. Fetch ALL active jobs to populate customers (Fully Live Portfolio)
-            const jobsRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=Pending&Stage=Progress&pageSize=250&columns=ID,Name,Customer,Site,Status,DateIssued,DateModified,Tags`);
+            const jobsRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=in(Pending,Progress)&pageSize=250&columns=ID,Name,Customer,Site,Status,DateIssued,DateModified,Tags`);
             const siteMap = new Map();
 
             // Build unique map of customers
@@ -343,7 +343,7 @@ customersRouter.get('/api/latest-job', async (req, res) => {
         }
 
         const customerFilter = customer ? `&Customer.CompanyName=${encodeURIComponent(customer)}` : '';
-        const jobsRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=Pending&Stage=Progress&pageSize=1&orderby=-DateModified&columns=ID,Name,Customer,Site,DateModified${customerFilter}`);
+        const jobsRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=in(Pending,Progress)&pageSize=1&orderby=-DateModified&columns=ID,Name,Customer,Site,DateModified${customerFilter}`);
         const job = jobsRes.data?.[0];
         if (!job) return res.json({ jobId: null, message: 'No active jobs found' });
         res.json({

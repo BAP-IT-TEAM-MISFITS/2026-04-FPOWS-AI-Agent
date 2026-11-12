@@ -40,7 +40,7 @@ export async function sendManagerDailyReport(bypassCheck = false) {
 
             // 1. Target ONLY sites with active (Pending/Progress) jobs as requested
             console.log("[CRON] Scanning for active Pending/Progress jobs...");
-            const activeJobsRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=Pending&Stage=Progress&pageSize=250&columns=ID,Site,Customer`);
+            const activeJobsRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=in(Pending,Progress)&pageSize=250&columns=ID,Site,Customer`);
 
             if (activeJobsRes.data) {
                 console.log(`[CRON] Found ${activeJobsRes.data.length} active jobs across the portfolio.`);
