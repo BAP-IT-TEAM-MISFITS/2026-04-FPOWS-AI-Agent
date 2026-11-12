@@ -52,3 +52,16 @@ export const getSimpro = async (path, retries = 3, delayMs = 1500, _held = false
         if (!_held) _release();
     }
 };
+
+// Fetch every page of a simPRO list endpoint and return the concatenated rows.
+// simPRO caps pageSize at 250 and reports the page count in `Result-Pages`.
+export const getSimproAll = async (path, pageSize = 250) => {
+    const sep = path.includes('?') ? '&' : '?';
+    const pageUrl = (page) => `${path}${sep}pageSize=${pageSize}&page=${page}`;
+    const first = await getSimpro(pageUrl(1));
+    const pages = parseInt(first.headers?.['result-pages'] || '1', 10) || 1;
+    const rest = await Promise.all(
+        Array.from({ length: pages - 1 }, (_, i) => getSimpro(pageUrl(i + 2)))
+    );
+    return [first, ...rest].flatMap(r => r.data || []);
+};

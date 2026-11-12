@@ -250,7 +250,7 @@
         <div class="steps">
           <div class="step"><div class="sn">1</div><div class="sb">
             <div class="stl">Fetch all active jobs</div>
-            <div class="sdc">GET /jobs/?Stage=in(Pending,Progress) — up to 250, with Tags & DateModified</div>
+            <div class="sdc">GET /jobs/?Stage=in(Pending,Progress) — all pages, with Tags & DateModified</div>
           </div></div>
           <hr class="sdv"/>
           <div class="step"><div class="sn">2</div><div class="sb">
@@ -503,7 +503,7 @@
           <hr class="sdv"/>
           <div class="step"><div class="sn">2</div><div class="sb">
             <div class="stl">Discover active portfolio sites</div>
-            <div class="sdc">Fetches all Pending/Progress jobs (up to 250) — builds Map of unique Site IDs with representative job IDs</div>
+            <div class="sdc">Fetches all In Progress jobs (all pages) — builds Map of unique Site IDs with representative job IDs</div>
           </div></div>
           <hr class="sdv"/>
           <div class="step"><div class="sn">3</div><div class="sb">
@@ -583,7 +583,7 @@
             <tr><td>Ad hoc</td><td>On demand</td><td>Bi-weekly master summary (manual trigger)</td></tr>
           </tbody>
         </table>
-        <div style="margin-top:6px; font-size:8px; color:#6b7280; font-style:italic">Timezone: Asia/Manila (UTC+8). Note: Cloud Run containers restart between requests — node-cron is re-registered on each cold start.</div>
+        <div style="margin-top:6px; font-size:8px; color:#6b7280; font-style:italic">Timezone: Asia/Manila (UTC+8). Fired by Cloud Scheduler (fpows-daily-report-6am) hitting /api/trigger-manager-report.</div>
       </div>
 
       <div class="sl">ENVIRONMENT VARIABLES</div>

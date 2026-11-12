@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { COMPANY_ID, MANAGER_EMAIL, SMTP_USER, DATA_DIR } from '../config.js';
-import { getSimpro } from './simpro.js';
+import { getSimpro, getSimproAll } from './simpro.js';
 import { getTransporter } from './mailer.js';
 import { fetchFpowData } from './fpow.js';
 
@@ -38,13 +38,15 @@ export async function sendManagerDailyReport(bypassCheck = false) {
             console.log("[CRON] Discovering Total Portfolio (Major & Regular Clients)...");
             console.log("[CRON] Discovering Total Portfolio via Global Site Scan...");
 
-            // 1. Target ONLY sites with active (Pending/Progress) jobs as requested
-            console.log("[CRON] Scanning for active Pending/Progress jobs...");
-            const activeJobsRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=in(Pending,Progress)&pageSize=250&columns=ID,Site,Customer`);
+            // 1. Target ONLY sites with In Progress jobs. Including Pending would mean
+            // ~1,400 more jobs / ~550 sites, which the per-site live fetch can't cover
+            // in a reasonable time.
+            console.log("[CRON] Scanning for In Progress jobs...");
+            const activeJobs = await getSimproAll(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=Progress&columns=ID,Site,Customer`);
 
-            if (activeJobsRes.data) {
-                console.log(`[CRON] Found ${activeJobsRes.data.length} active jobs across the portfolio.`);
-                for (const j of activeJobsRes.data) {
+            if (activeJobs.length) {
+                console.log(`[CRON] Found ${activeJobs.length} active jobs across the portfolio.`);
+                for (const j of activeJobs) {
                     if (j.Site?.ID && !discoveredSites.has(String(j.Site.ID))) {
                         discoveredSites.set(String(j.Site.ID), {
                             siteName: j.Site.Name || "Active Site",

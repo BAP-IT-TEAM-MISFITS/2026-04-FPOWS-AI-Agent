@@ -3,7 +3,7 @@
 // debug view. The active-customers cache is shared via src/state.js.
 import express from 'express';
 import { COMPANY_ID } from '../config.js';
-import { getSimpro } from '../services/simpro.js';
+import { getSimpro, getSimproAll } from '../services/simpro.js';
 import { searchLimiter } from '../middleware/rateLimit.js';
 import { cache } from '../state.js';
 
@@ -40,7 +40,7 @@ customersRouter.get('/api/customers/search', searchLimiter, async (req, res) => 
         // Cache valid for 60 seconds. force=1 always bypasses it (e.g. on modal open)
         if (!cache.customers || (Date.now() - cache.customersTime) > 60000 || req.query.force === '1') {
             // 1. Fetch ALL active jobs to populate customers (Fully Live Portfolio)
-            const jobsRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=in(Pending,Progress)&pageSize=250&columns=ID,Name,Customer,Site,Status,DateIssued,DateModified,Tags`);
+            const jobs = await getSimproAll(`/api/v1.0/companies/${COMPANY_ID}/jobs/?Stage=in(Pending,Progress)&columns=ID,Name,Customer,Site,Status,DateIssued,DateModified,Tags`);
             const siteMap = new Map();
 
             // Build unique map of customers
@@ -48,7 +48,7 @@ customersRouter.get('/api/customers/search', searchLimiter, async (req, res) => 
             const OVERDUE_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000;
             const now = Date.now();
 
-            jobsRes.data.forEach(job => {
+            jobs.forEach(job => {
                 if (job.Customer && job.Customer.ID) {
                     const cId = job.Customer.ID;
                     const modDate = job.DateModified ? new Date(job.DateModified).getTime() : 0;
@@ -95,45 +95,39 @@ customersRouter.get('/api/customers/search', searchLimiter, async (req, res) => 
                 return names.length > 0 ? names : null;
             };
 
-            // Process all customers in small throttled batches to prevent 429 Too Many Requests errors
-            const batchSize = 3;
-            for (let i = 0; i < customersArray.length; i += batchSize) {
-                const batch = customersArray.slice(i, i + batchSize);
-                await Promise.allSettled(batch.map(async (c) => {
-                    if (c.priority) return;
+            // Fetch customer profile Tags and Address in bulk (ID=in(...)) rather than
+            // one request per customer — there are 500+ customers with active work.
+            const profiles = new Map();
+            const ID_CHUNK = 100; // keeps the URL short; well under the 250 pageSize
+            for (const routeType of ['companies', 'individuals']) {
+                const ids = customersArray
+                    .filter(c => (c.type === 'Company') === (routeType === 'companies'))
+                    .map(c => c.id);
+                for (let i = 0; i < ids.length; i += ID_CHUNK) {
                     try {
-                        let finalTags = null;
-
-                        // Try to fetch Customer Profile Tags and Address directly via standard endpoint
-                        const routeType = c.type === 'Company' ? 'companies' : 'individuals';
-                        const custRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/customers/${routeType}/${c.id}?columns=ID,Tags,Address`);
-
-                        // Handle Tags
-                        if (custRes.data && custRes.data.Tags && getTagNames(custRes.data.Tags)) {
-                            const allTags = getTagNames(custRes.data.Tags);
-                            // Strictly filter down to only tags containing "testing" (which catches both TESTING and NON TESTING)
-                            const testingTags = allTags.filter(t => t.toLowerCase().includes('testing'));
-
-                            if (testingTags.length > 0) {
-                                finalTags = testingTags;
-                            }
-                        }
-
-                        // Handle Address/Postcode
-                        if (custRes.data && custRes.data.Address && custRes.data.Address.PostalCode) {
-                            c.postcode = custRes.data.Address.PostalCode;
-                        }
-
-                        if (finalTags) {
-                            c.priority = true;
-                            c.priorityTags = finalTags;
-                        }
+                        const chunk = ids.slice(i, i + ID_CHUNK).join(',');
+                        const custRes = await getSimpro(`/api/v1.0/companies/${COMPANY_ID}/customers/${routeType}/?ID=in(${chunk})&pageSize=250&columns=ID,Tags,Address`);
+                        for (const p of custRes.data || []) profiles.set(p.ID, p);
                     } catch (e) {
-                        // Ignore lookup errors silently
+                        // Ignore lookup errors — those customers just stay unenriched
                     }
-                }));
-                // artificial delay to ensure we do not hit simPRO rate limits
-                await new Promise(r => setTimeout(r, 300));
+                }
+            }
+
+            for (const c of customersArray) {
+                const p = profiles.get(c.id);
+                if (!p) continue;
+
+                // Strictly filter down to only tags containing "testing" (which catches both TESTING and NON TESTING)
+                const testingTags = (getTagNames(p.Tags) || []).filter(t => t.toLowerCase().includes('testing'));
+                if (testingTags.length > 0) {
+                    c.priority = true;
+                    c.priorityTags = testingTags;
+                }
+
+                if (p.Address && p.Address.PostalCode) {
+                    c.postcode = p.Address.PostalCode;
+                }
             }
 
             cache.customers = customersArray;

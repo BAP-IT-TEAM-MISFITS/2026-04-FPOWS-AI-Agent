@@ -1,8 +1,9 @@
 // FPOWS — entry point.
-// Builds the Express app, registers scheduled jobs, and starts the HTTP server.
+// Builds the Express app and starts the HTTP server. The daily report is fired
+// by Cloud Scheduler hitting /api/trigger-manager-report (no in-process cron —
+// running both sent the report twice).
 // Application code lives under ./src (config, services, middleware, routes).
 import { createApp } from './src/app.js';
-import { registerCronJobs } from './src/jobs/cron.js';
 import { PORT } from './src/config.js';
 
 // Re-export so utility scripts can trigger the report without booting the server
@@ -10,7 +11,6 @@ import { PORT } from './src/config.js';
 export { sendManagerDailyReport } from './src/services/report.js';
 
 const app = createApp();
-registerCronJobs();
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`[SERVER] FPOWS Automation live on port ${PORT}`);

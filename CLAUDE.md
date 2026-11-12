@@ -17,7 +17,7 @@ Context for Claude Code when working in this repository.
 - **simPRO API** as the data source (REST, Bearer token auth, via `axios`)
 - **Google OAuth 2.0** for login (`google-auth-library`), restricted to `@redadair.com.au` emails
 - **Nodemailer** over Gmail SMTP (port 465) for report emails
-- `node-cron` for the in-process daily schedule; `helmet`, `express-rate-limit`, `express-session` for hardening
+- `helmet`, `express-rate-limit`, `express-session` for hardening
 
 ## Running locally
 
@@ -44,13 +44,13 @@ See `.env.example` for the full annotated list. Every var is read via `process.e
 ## Project structure
 
 ```
-server.js                 # thin entry point: build app, register cron, listen
+server.js                 # thin entry point: build app, listen (no in-process cron — Cloud Scheduler fires the report)
 src/
   config.js               # env loading + cleanEnv + derived paths + OAuth client (fails fast)
   state.js                # shared in-memory cache (active customers)
   app.js                  # Express app assembly — middleware + router wiring ORDER lives here
   services/
-    simpro.js             # getSimpro() — simPRO GET helper w/ 429 retry
+    simpro.js             # getSimpro() — simPRO GET helper w/ 429 retry; getSimproAll() — follows Result-Pages
     mailer.js             # getTransporter() + sendMailWithRetry()
     text.js               # decodeHtmlEntities, cleanDescriptionForClient, fullDescriptionForStaff
     fpow.js               # fetchFpowData() (core aggregation) + syncAssetDates()
@@ -67,8 +67,6 @@ src/
     email.routes.js       # /api/send-email, /api/logs, /api/delete-history
     presence.routes.js    # /api/presence/*  (+ in-memory presenceMap & cleanup interval)
     system.routes.js      # /api/ping, /health, /api/trigger-manager-report
-  jobs/
-    cron.js               # 6 AM Asia/Manila daily report schedule
 public/                   # served web app: index.html, docs.html, logo.png, version.txt
 data/                     # runtime read/write: email_history.jsonl, last_daily_report.txt
 deploy/                   # deploy.ps1, take_screenshots.ps1, cloud-sql-proxy.exe
